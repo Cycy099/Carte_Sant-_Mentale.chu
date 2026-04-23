@@ -1,0 +1,1363 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Répertoire Santé Mentale Liège</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
+    
+    <style>
+        :root { --liege: #e67e22; --verviers: #27ae60; --huy: #2980b9; --waremme: #8e44ad; }
+        body { margin: 0; display: flex; height: 100vh; font-family: 'Segoe UI', sans-serif; background: #f4f7f6; overflow: hidden; }
+        #map { flex: 1; height: 100vh; }
+        #sidebar { width: 420px; background: white; border-left: 5px solid #2c3e50; display: flex; flex-direction: column; box-shadow: -2px 0 10px rgba(0,0,0,0.1); }
+        .header { background: #2c3e50; color: white; padding: 15px; text-align: center; }
+        .filter-section { padding: 10px; background: #f8f9fa; border-bottom: 1px solid #ddd; }
+        #content { padding: 15px; overflow-y: auto; flex: 1; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        td { padding: 10px; border-bottom: 1px solid #eee; vertical-align: middle; }
+        .btn-mode { flex:1; padding:8px; border:none; border-radius:4px; cursor:pointer; font-weight:bold; color:white; font-size:0.75rem; transition: 0.2s; }
+        .btn-sub { font-size:0.7rem; border:1px solid #ccc; background:white; cursor:pointer; padding:5px; border-radius:4px; margin: 2px; }
+        .btn-reset { width: 90%; margin: 10px auto; padding: 8px; background: #34495e; color: white; border: none; cursor: pointer; border-radius: 5px; }
+        .urgences-block { background: #fff3f3; border: 2px solid #e74c3c; border-radius: 8px; margin: 10px; padding: 10px; }
+        .urgence-item { display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 3px; border-bottom: 1px dashed #fab1a0; }
+        .urgence-num { font-weight: bold; color: #d63031; }
+        .modal { display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); }
+        .modal-content { background: white; margin: 5% auto; padding: 25px; border-radius: 12px; width: 85%; max-width: 500px; position: relative; max-height: 80vh; overflow-y: auto; }
+        .close-modal { position: absolute; right: 20px; top: 15px; font-size: 28px; cursor: pointer; color: #aaa; }
+	.menu-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.4s ease-in-out;
+    background: white;
+}
+
+/* Quand on ajoute cette classe en JS, le menu descend */
+.menu-open {
+    max-height: 600px; /* Assez grand pour tout le contenu */
+}
+
+/* Rotation de la flèche */
+.arrow-rotate {
+    transform: rotate(180deg);
+}
+    </style>
+</head>
+<body>
+
+    <div id="map"></div>
+
+    <div id="sidebar">
+        
+        <div class="header">
+            <h2 style="margin:0;">Santé Mentale Liège</h2>
+            <p style="margin:5px 0 10px 0; opacity:0.8;">Répertoire Adultes</p>
+            
+            <select id="groupesSoutien" onchange="voirGroupe(this.value)" style="width: 100%; padding: 8px; border-radius: 5px; border: none; background: #34495e; color: white; font-size: 0.8rem; cursor: pointer;">
+               <option value="">🤝 Groupes de soutien</option>
+	<option value="similes">Similes Wallonie (troubles psychiques)</option>
+	<option value="entendeurs de voix">Groupe des Entendeurs de Voix. (Hallucinations)</option>
+        <option value="balancier">Le Balancier (Bipolarité)</option>
+	<option value="funambule">Le Funambule (Bipolarité)</option>
+	<option value="accompagnement deuil">Espace PAD (Deuil)</option>
+	<option value="deuil périnatal">Deuil (périnatal)</option>
+	<option value="vivre sous les oliviers">Vivre sous les oliviers (Deuil - Suicide)</option>
+        <option value="vie libre">Vie Libre (Alcool)</option>
+        <option value="alcooliques anonymes">Alcooliques Anonymes (Alcool)</option>
+	<option value="al'anon et al'ateen">Al'anon et Al'ateen (Proches alcoolique)</option>
+	<option value="abstinence et tolérance">Abstinence et Tolérance (Alcool)</option>
+	<option value="rebond">Rebond (Consommateurs)</option>
+	<option value="espace proche">Espace Proche (Proches de consommateurs)</option>
+    </select>
+    </div>
+
+        <div onclick="toggleMenu()" style="cursor:pointer; background:#ecf0f1; padding: 10px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ddd;">
+            <span style="font-size: 0.75rem; font-weight: bold; color: #2c3e50;">⚙️ FILTRER LA CARTE</span>
+            <span id="filter-arrow" style="transition: 0.3s;">▼</span>
+        </div>
+
+        <div id="filter-menu" class="menu-content">
+            <div class="filter-section">
+                <p style="margin: 0 0 8px 0; font-size: 0.75rem; font-weight: bold; color: #2c3e50;">🎯 MODES PRINCIPAUX</p>
+                <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+		    <button class="btn-mode" onclick="setMode('urgence')" style="background:#e74c3c;">🚑 URGENCE</button>
+                    <button class="btn-mode" onclick="setMode('liaison')" style="background:#34495e;">👩‍⚕️ LIAISON</button>
+	    	    <button class="btn-mode" onclick="setMode('tout')" style="background:#7f8c8d;">🌐 TOUT</button>
+                </div>
+
+                <p style="margin: 0 0 8px 0; font-size: 0.75rem; font-weight: bold; color: #2c3e50;">🔍 FILTRES PAR CATÉGORIE</p>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
+                    <button class="btn-sub" onclick="setMode('HOSP')">🏥 Hôpitaux (R)</button>
+                    <button class="btn-sub" onclick="setMode('HOSP_SEMI')">🏢 Hôpitaux (J)</button>
+                    <button class="btn-sub" onclick="setMode('SSM')">🟢 SSM</button>
+                    <button class="btn-sub" onclick="setMode('ASSU')">🟡 Assuétudes</button>
+                    <button class="btn-sub" onclick="setMode('MSP')">💎 MSP</button>
+                    <button class="btn-sub" onclick="setMode('REINSER')">🏗️ Réinsertion</button>
+                    <button class="btn-sub" onclick="setMode('IHP')">🏠 Logements IHP</button>
+                </div>
+            </div>
+        </div>
+
+        <button class="btn-reset" onclick="window.location.reload()">🔄 VUE PROVINCIALE</button>
+
+        <div id="content">
+            <p style="text-align:center; margin-top:30px; color:gray; font-style:italic;">⬅️ Cliquez sur un arrondissement sur la carte</p>
+        </div>
+
+        <div class="urgences-block">
+            <p style="margin:0 0 8px 0; color:#e74c3c; font-weight:bold; font-size:0.9rem;">🚨 Lignes d'Urgence</p>
+            <div class="urgence-item"><span>Prévention Suicide</span> <span class="urgence-num">0800 32 123</span></div>
+            <div class="urgence-item"><span>Télé-Accueil</span> <span class="urgence-num">107</span></div>
+            <div class="urgence-item"><span>Ligne Prévention</span> <span class="urgence-num">0800 777 40</span></div>
+        </div>
+
+    </div> <div id="infoModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeModal()">&times;</span>
+            <div id="modalBody"></div>
+        </div>
+    </div>
+
+</body>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+
+<script>
+    // --- 1. INITIALISATION CARTE ---
+    var map = L.map('map').setView([50.55, 5.65], 9);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    var markersGroup = L.layerGroup().addTo(map);
+    var currentArrondissement = "";
+
+    // --- 2. BARRE DE RECHERCHE ---
+    var geocoder = L.Control.geocoder({
+        defaultMarkGeocode: false,
+        placeholder: "Rechercher une adresse...",
+        errorMessage: "Adresse introuvable."
+    }).on('markgeocode', function(e) {
+        var latlng = e.geocode.center;
+        L.marker(latlng).addTo(map).bindPopup("<b>Recherche :</b><br>" + e.geocode.name).openPopup();
+        map.setView(latlng, 15);
+    }).addTo(map);
+
+    // --- 3. FONCTION CAMEMBERT ---
+    function createDonutIcon(types) {
+        var colorMap = {
+            "HOSP": "#e74c3c", "HOSP_SEMI": "#3498db", "SSM": "#27ae60",
+            "ASSU": "#f1c40f", "REINSER": "#9C6DA5",
+            "MSP": "#FF00FF", "IHP": "#FF8C00"
+        };
+        if (!Array.isArray(types)) types = [types];
+        var sliceAngle = 360 / types.length;
+        var gradientSteps = [];
+        var currentAngle = 0;
+        types.forEach(function(t) {
+            var color = colorMap[t] || "#95a5a6";
+            gradientSteps.push(`${color} ${currentAngle}deg ${currentAngle + sliceAngle}deg`);
+            currentAngle += sliceAngle;
+        });
+        return L.divIcon({
+            className: 'custom-donut-icon',
+            html: `<div style="width:18px; height:18px; border-radius:50%; background:conic-gradient(${gradientSteps.join(', ')}); border:2px solid white; box-shadow:0 0 4px rgba(0,0,0,0.4);"></div>`,
+            iconSize: [22, 22], iconAnchor: [11, 11]
+        });
+    }
+
+    // --- 4. MODALE & FILTRES ---
+    function openDetails(nomEtablissement) {
+    var s = databaseTotale.find(item => item.nom === nomEtablissement);
+    
+    // 2. On vérifie si 's' existe AVEC une accolade {
+    if (s) {
+        // On définit le contenu de la section Services (Gestion des sauts de ligne incluse)
+        var rawServices = s.services || s.missions || "Accompagnement et soins.";
+        var servicesContent = rawServices.replace(/\n/g, '<br>');
+        
+        // On définit le contenu de l'admission
+        var rawAdmis = s.admis || s.admission || "Contacter l'établissement pour la procédure.";
+        var admissionContent = rawAdmis.replace(/\n/g, '<br>');
+
+    document.getElementById('modalBody').innerHTML = `
+        <h2>${s.nom}</h2>
+        <p><strong>📍 Adresse :</strong> ${s.adr}</p>
+        <p><strong>📞 Tel :</strong> ${s.tel}</p>
+        <p><strong>🌍 Territoire :</strong> ${s.territoire || "Province de Liège"}</p>
+        <hr>
+        <p><strong>Description :</strong> ${s.desc || "Information non renseignée."}</p>
+        
+        <p><strong>Services :</strong><br>${servicesContent.replace(/\n/g, '<br>')}</p>
+        
+        <p><strong>Admission :</strong><br>${admissionContent}</p>
+        
+        <button onclick="closeModal()" style="width:100%; padding:12px; margin-top:10px; background:#2c3e50; color:white; border:none; border-radius:5px; cursor:pointer; font-weight:bold;">RETOUR</button>
+    `;
+    document.getElementById('infoModal').style.display = "block";
+    } else {
+            console.error("Établissement non trouvé : " + nomEtablissement);
+    }
+}
+function voirGroupe(id) {
+    if (!id) return;
+    var g = groupesData[id];
+    
+    if (g) {
+        // 1. Récupération des données
+        var descText = g.description || g.desc || "";
+        var servText = g.services || "";
+        var admisText = g.admis || g.admission || "";
+
+        // 2. Construction du HTML
+        var htmlContent = `<h2 style="color:#e67e22; margin-bottom:15px;">${g.nom}</h2>`;
+        
+        // Adresse et Téléphone
+        if (g.adr) htmlContent += `<p><strong>📍 Adresse :</strong> ${g.adr}</p>`;
+        if (g.tel) htmlContent += `<p><strong>📞 Tel :</strong> ${g.tel}</p>`;
+
+        // Section Description
+        if (descText) {
+            htmlContent += `
+                <div style="margin-top:15px; border-bottom: 1px solid #ddd; padding-bottom:10px;">
+                    <p><strong>Description :</strong><br>${descText.replace(/\n/g, '<br>')}</p>
+                </div>`;
+        }
+
+        // Section Services (Le bloc gris/orange)
+        if (servText) {
+            htmlContent += `
+                <div style="background:#f4f7f6; padding:15px; border-radius:8px; border-left:4px solid #e67e22; margin-top:15px;">
+                    <p style="margin:0;"><strong>Services et Missions :</strong><br>
+                    ${servText.replace(/\n/g, '<br>')}
+                    </p>
+                </div>`;
+        }
+
+        // Section Admission (C'est celle-ci qu'il manquait !)
+        if (admisText) {
+            htmlContent += `
+                <div style="margin-top:15px; padding:10px; border:1px dashed #e67e22; border-radius:5px;">
+                    <p style="margin:0;"><strong>✅ Admission :</strong><br>
+                    ${admisText.replace(/\n/g, '<br>')}
+                    </p>
+                </div>`;
+        }
+
+        // Bouton Retour
+        htmlContent += `<button onclick="closeModal()" style="width:100%; padding:12px; margin-top:20px; background:#2c3e50; color:white; border:none; border-radius:5px; cursor:pointer; font-weight:bold;">RETOUR</button>`;
+
+        // 3. Affichage
+        document.getElementById('modalBody').innerHTML = htmlContent;
+        document.getElementById('infoModal').style.display = "block";
+        document.getElementById('groupesSoutien').value = ""; 
+    }
+}
+function toggleMenu() {
+    var menu = document.getElementById("filter-menu");
+    var arrow = document.getElementById("filter-arrow");
+    
+    menu.classList.toggle("menu-open");
+    arrow.classList.toggle("arrow-rotate");
+}
+    function closeModal() { document.getElementById('infoModal').style.display = "none"; }
+
+    function setMode(mode) {
+    if (!currentArrondissement) { 
+        alert("Veuillez d'abord sélectionner une zone sur la carte."); 
+        return; 
+    }
+    var menu = document.getElementById("filter-menu");
+    if (menu.classList.contains("menu-open")) {
+        toggleMenu();
+    }
+    markersGroup.clearLayers();
+    var tbodyHtml = "";
+    
+    // IMPORTANT : On utilise databaseTotale ici
+    var filteredData = databaseTotale.filter(function(s) {
+        if (s.arr !== currentArrondissement) return false;
+        var types = Array.isArray(s.type) ? s.type : [s.type];
+        if (mode === 'tout') return true;
+        if (mode === 'liaison') return (types.includes('IHP') || types.includes('REINSER') || types.includes('MSP') || types.includes('ASSU'));
+        if (mode === 'urgence') return (types.includes('HOSP') || types.includes('HOSP_SEMI') || types.includes('ASSU'));
+        return types.includes(mode);
+    });
+
+    filteredData.forEach(function(s) {
+        var types = Array.isArray(s.type) ? s.type : [s.type];
+        
+        // Création des badges de couleur
+        var badges = types.map(t => {
+            var c = {
+                "HOSP":"#e74c3c","HOSP_SEMI":"#3498db","SSM":"#27ae60",
+                "ASSU":"#f1c40f","REINSER":"#9C6DA5",
+                "MSP":"#FF00FF","IHP":"#FF8C00"
+            }[t] || "#95a5a6";
+            return `<span style="background:${c}; color:white; padding:2px 4px; border-radius:3px; font-weight:bold; font-size:0.65rem; margin-right:2px;">${t}</span>`;
+        }).join('');
+
+        // Sécurisation du nom pour le JavaScript (gestion des apostrophes comme dans L'Accueil)
+        var safeNom = s.nom.replace(/'/g, "\\'");
+
+        // 1. Ajout à la liste latérale
+        tbodyHtml += `<tr>
+            <td>${badges}<br><b>${s.com}</b></td>
+            <td>${s.nom}</td>
+            <td><button onclick="openDetails('${safeNom}')" style="padding:4px 8px; cursor:pointer; background:#2c3e50; color:white; border:none; border-radius:4px;">Fiche</button></td>
+        </tr>`;
+        
+        // 2. Ajout du marqueur sur la carte
+        L.marker([s.lat, s.lng], { icon: createDonutIcon(s.type) })
+            .addTo(markersGroup)
+            .bindPopup(`
+                <div style="text-align:center;">
+                    <b style="font-size:1.1rem;">${s.nom}</b><br>
+                    <p style="font-size:0.85rem; margin:5px 0;">${s.com}</p>
+                    <button onclick="openDetails('${safeNom}')" style="background:#2c3e50; color:white; border:none; padding:5px 10px; border-radius:3px; cursor:pointer;">Voir la fiche complète</button>
+                </div>
+            `);
+    });
+
+    // Mise à jour de l'affichage
+    document.getElementById('content').innerHTML = `
+        <h3 style="border-bottom:2px solid #2c3e50; padding-bottom:5px;">${currentArrondissement}</h3>
+        <table>${tbodyHtml || "<tr><td>Aucun service trouvé pour ce filtre.</td></tr>"}</table>
+    `;
+}
+
+// ----- 5. Les données ----
+
+var databaseHospi = [
+     { 
+        arr: "Liège", com: "Liège", nom: "Site Agora (ISoSL)", 
+        type: ["HOSP", "HOSP_SEMI", "ASSU", "IHP"], 
+        lat: 50.649379, lng: 5.568857,
+        adr: "Montagne Sainte-Walburge 4a, 4000 Liège", tel: "Isosl : 04/254.77.10 \n Services de Agora : 04/254.77.11",
+        territoire: "Province de Liège",
+        desc: "Centre hospitalier spécialisé en soins aigus et réhabilitation.",
+       services: "<b>— PÔLE HOSPITALIER (Aigu) —</b>\n" +
+              "• <b>Les Pléiades</b> : Troubles de l'humeur et pathologies psychosomatiques et somatoformes liées à un PTSD.\n Dr Buccoleri : 04/224.63.73\n " +
+	      "• <b>Dédale</b> : double diagnostic, psychose et dépendance (alcool, drogues, médicaments).\n Hospitalisation de deux à six mois.\n " +
+              "• <b>Hestia</b> : Stabilisation de toute personnes présentant des pathologies résistantes et mis en place d'un projet thérapeutique au long-cours\n" +
+	      "• <b>Cadran</b> : Prise en charge et réhabilitation intensive pour troubles psychotiques.\n" +
+              "• <b>Arcania</b> : Prise en charge de Pathologies chroniques.\n\n" +
+              "<b>— PÔLE ASSUÉTUDES —</b>\n" +
+              "• <b>Odyssée</b> : Unité mixte spécialisée dans la prise en charge de patients toxicomanes.\n Appel quotidien pour appuyer la demande : 04/224.62.80 ou 04/224.62.82\n" +
+              "• <b>L'Équipée</b> : Hôpital de jour pour le maintien de l'abstinence (post-cure).\n" +
+              "• <b>Start-Mass asbl</b> : Accueil bas seuil, soins infirmiers et substitution.\n\n" +
+              "<b>— RÉINSERTION & LOGEMENT & HP de jour —</b>\n" +
+              "• <b>IHP ISoSL</b> : Coordination de logements supervisés en autonomie.",
+	admis: "Entretien préliminaire. Appuis de candidature par CT."
+    },
+    { 
+        arr: "Liège", com: "Liège", nom: "Site Petit-Bourgogne (ISoSL)", 
+        type: ["HOSP", "HOSP_SEMI", "MSP", "ASSU"], 
+        lat: 50.61593150465583, lng: 5.557688729667789,
+        adr: "Rue Professeur Mahaim 84, 4000 Liège", tel: "Sésame : 04 254 77 10 \n• Service d’admission :04 254 77 11 ",
+        territoire: "Liège (Secteur Sésame)",
+        desc: "Spécialisé en psychiatrie médico-légale et alcoologie.",
+        services: "<b>— PÔLE HOSPITALIER (Aigu) —</b>\n" +
+              "• <b>CAP (HP de jour)</b> : Service de réhabilitation pour patients ayant des symptôme psychiatriques stabilisés pour qui un accompagnement pluridisciplinaire, à court terme, est susceptible d'éviter une hospitalisation complète ;\n" +
+              "• <b>Les Bleuets</b> : Réhabilitation intensive pour troubles psychotiques, bipolaires (avec groupe de soutien : Le Balancier) et maniaco-dépressifs.\n" +
+              "• <b>Les Genêts</b> : Tout type de pathologies (sauf Assuétude aux drogues dures et patients attends de troubles cognitifs)\n\n" +
+	      "• <b>Les Alizées</b> : Troubles émotionnel et personnalité Borderline.\n\n" +
+	      "• <b>Portails</b> : Adultes présentant des troubles psychiques nécessitant temporairement un isolement. \n\n" +
+	      "<b>— MAISON DE SOINS PSYCHIATRIQUES —</b>\n" +
+              "• <b>Les Charmilles (Isosl)</b> : Prise en charge de patients stabilisés, travaillant à plus d'autonomie.\n Adresse: Rue Professeur Mahaim 84, 4000 Liège\n Tél: 04/254.78.22 - 04/254.79.50\n" +
+	      "• <b>Les Cèdres (Isosl)</b> : Prise en charge de patients stabilisés, travaillant à plus d'autonomie.\n Adresse: Rue Professeur Mahaim 2, 4000 Liège\n Tél: 04/224.64.70\n" +
+              "<b>— PÔLE ASSUÉTUDES —</b>\n" +
+              "• <b>Les Genêts alcool</b> : Assuétude à l'alcool.\n Double diagnostique : psychopathologie + assuétude à l'alcool.\n Rendez-vous de réadmission au 06/254.77.10\n",
+	admis : "Sésame : 04/254.77.10\n• Service d’admission :04 254 77 11 ",
+    },
+    { 
+        arr: "Verviers", com: "Henri-Chapelle", nom: "Les Frères Alexiens", 
+        type: ["HOSP", "HOSP_SEMI", "MSP"], 
+        lat: 50.67329935330298, lng: 5.9551739819036715,
+        adr: "Rue du Château de Ruyff 68, 4841 Henri-Chapelle", tel: "087/59 32 11",
+        territoire: "Arrondissement de Verviers / Communauté Germanophone",
+        desc: "Clinique psychiatrique offrant un trajet de soins complet (Aigu -> Chronique -> Jour).",
+        services: "<b>— PSYCHIATRIE GÉNÉRALE (Adultes) —</b>\n" +
+              "• <b>Service Iris et Genêts</b> : prise en charge globale du patient en phase aiguë\n" +
+	      "• <b>Service Perce-neige</b> : prise en charge des personnes présentant un double diagnostique TDI + psychopathologie\n" +
+              "• <b>Service les Lauriers</b> : Accompagnement vers la réinsertion sociale et l'autonomie. Contacts : 087/59.32.35\n\n" +
+              "<b>— PÔLE Hôpital de jour —</b>\n" +
+              "• <b>Service les Tournesols</b> : Prise en charge de jour pour patients adultes présentant tous types de souffrances psychiques \n Contacts : 087/59 32 11 \n\n" +
+              "<b>— STRUCTURES DE VIE (Post-Hospitalier) —</b>\n" +
+              "• <b>MSP L'Églantine</b> : accueille des personnes présentant un trouble psychique chronique stabilisée dont l’autonomie doit être optimalisée. - Court Moyen Long terme\n\n",
+	admis: "Demande d'admission par CT : 087/59 32 11",
+    },
+    { 
+        arr: "Verviers", com: "Lierneux", nom: "L'Accueil (Lierneux)", 
+        type: ["HOSP", "HOSP_SEMI", "MSP", "IHP"], 
+        lat: 50.289024586852854, lng: 5.786859515341944,
+        adr: "Rue du Doyard 15, 4990 Lierneux", tel: "080/29.21.11",
+        territoire: "Sud de la Province (Huy-Waremme-Verviers) et Luxembourg",
+        desc: "Centre spécialisé en hospitalisation et Accueil Familial Thérapeutique (AFT).",
+        services: "<b>— UNITÉS DE SOINS RÉSIDENTIELS —</b>\n" +
+              "• <b>Service Alloux</b> : Accompagnement de patient présentant des troubles nécessitant une restriction momentanée de la liberté.\n" +
+              "• <b>Les Oliviers</b> : Accompagnement de patients avec pathologies chroniques\n\n" +
+	      "• <b>Aria</b> : Souffrances psychiques sans troubles majeurs du comportement.\n assuétudes et dépendances sans objets.\n Troubles anxio-dépressifs ou bipolaires\n\n" +
+	      "• <b>Les Ormes</b> : Unité 'fermée' de gérontopsychiatrie qui admet les patients âgés de + de 60 ans\n\n" +
+	      "• <b>Les Mélèzes</b> : Patientes présentant des troubles nécessitant une restriction momentanée de la liberté. \n\n" +
+	      "• <b>Tempo</b> : Unité de soins psychiatriques quoi admission volontaire\n\n" +
+              "<b>— HOSPITALISATION DE JOUR —</b>\n" + 
+	      "  <b>Ka-Dense : S'adresse à toute personne qui désire trouver des pistes de solution face à sa difficulté à s'insérer dans le lien social ou la vie en général.</b>\n" +
+	      "<b>— MAISON DE SOINS PSYCHIATRIQUE —</b>\n" +
+	      "• <b>Le Hameau</b> : Assure un encadrement dans un milieu de vie Familiale et Sécurisant à une population psychiatrique stabilisée\n Équipe pluridisciplinaire.\n" +
+	      "• <b>Téléphone</b> : 080/31.08.90\n\n" +     
+	      "<b>— PÔLE DE RÉINSERTION —</b>\n" +
+	      "• <b>Tilleul rez</b> : une prise en charge institutionnelle prolongée dans un objectif de réapprentissage des compétences sociales minimales.\n" +
+              "• <b>Placement Familial</b> : Service historique unique permettant à certains patients de vivre en famille d'accueil tout en étant suivis par l'hôpital.\n\n",
+	admis: "<b>Admission :</b> Appel du service d'admission (080/29.21.11) \n En cas de TUS : Entretien de préadmission",
+    },
+    { 
+        arr: "Liège", com: "Liège", nom: "CHS Notre Dame des Anges", 
+        type: ["HOSP", "HOSP_SEMI", "IHP"], 
+        lat: 50.64710582449153, lng: 5.5441930684086635,
+        adr: "Rue Emile Vandervelde 67, 4000 Liège", tel: "04 224 72 11",
+        territoire: "Province de Liège",
+        desc: "Centre axé sur la réhabilitation. Admission uniquement sur demande d'un médecin extérieur.",
+        services: "<b>— UNITÉS DE SOINS RÉSIDENTIELS —</b>\n" +
+	     "• <b>Service HP Résidentiel</b> : Service polypsychiatrique en 3 phases : phase d’observation, phase de soin, phase de réhabilitation. \n Admission à la demande d'un médecin \n\n" +
+	     "<b>— HOSPITALISATION DE JOUR —</b>\n" +
+	     "• <b>Service Relais</b> : Trois programmes de soin :\n -Elan: Mise en place d’un programme de soin soutenu pour toute personne présentant une décompensation psychique aiguë.\n -Envol: Soins de consolidation à la suite d’une hospitalisation résidentielle ou du programme élan.\n -Rebond: Soins aux personnes nécessitant des soins psycho-médicaux récurrents. \n Admission à la demande d'un médecin. \n Admission via contacts mail et rdv de pré-admission : admissionhdj@cnda.be. \n\n" +
+	     "<b>— MAISON D'ACCUIEL —</b>\n" +
+	     "• <b>Saint-François d'Assise</b> : Personnes valides âgées de 21 à 65 ans, ayant une fragilité psychosociale ponctuelle ou persistante stabilisée.\n Les personnes admises doivent être autonomes dans leur mouvements et leur déplacements \n",
+	admis: "<b>Admission :</b> Différents selon le service d'admission",
+    },
+    { 
+        arr: "Liège", com: "Liège", nom: "Clinique Louis Hillier (CHC)", 
+        type: ["HOSP", "HOSP_SEMI", "ASSU"], 
+        lat: 50.63204885625027, lng: 5.549579026078803, 
+        adr: "Boulevard Louis Hillier 10, 4000 Liège", tel: "04/229.27.30",
+        territoire: "Liège",
+        desc: "Service de psychiatrie du groupe CHC spécialisé en alcoologie.",
+        services: "<b>— HOSPITALISATION RÉSIDENTIELLE —</b>\n" +
+	     	  "<b>— HOSPITALISATION DE JOUR —</b>\n" +
+	          "<b>— HOSPITALISATION DE NUIT —</b>\n",
+	admis: "<b>Admission :</b> Entretien de préadmission via sollicitations téléphoniques (04/229.27.30)",
+    },
+    { 
+        arr: "Liège", com: "Liège", nom: "La Clé : Hôpital de jour.", 
+        type: "HOSP_SEMI", 
+        lat: 50.64598543381136, lng: 5.59272746840862,
+        adr: "Boulevard de la Constitution 153, 4020 Liège", tel: "04/342.65.96",
+        territoire: "Province de Liège",
+        desc: "Centre psychothérapeutique de jour (indépendant des hôpitaux classiques).",
+        services: "<b>— POPULATION —</b>\n" +
+	     "<b> Public :</b> adultes et adolescents (dès 15 ans).\n" +
+	     "<b> Spécialité :</b> Cyberdépendance et jeux pathologiques.\n\n",
+	admis: "04/342.65.96",
+    },
+    { 
+        arr: "Liège", com: "Liège", nom: "Hôpital de jour 'Le Péri'", 
+        type: "HOSP_SEMI", 
+        lat: 50.64903608394474, lng: 5.569019614434628, 
+        adr: "Montagne Sainte-Walburge 4b, 4000 Liège", tel: "04/225.87.75",
+        territoire: "Liège",
+        desc: "Hôpital de jour spécialisé en psychogériatrie.",
+        services: "<b>— POPULATION —</b>\n" +
+	     "<b> Public :</b> Personnes âgées.\n" +
+	     "<b> Spécialité :</b> Troubles de la mémoire, du comportement et autres troubles médico-psychiatriques et psycho-sociaux. \n\n",
+	admis: "04/225.87.75",
+    },
+    { 
+        arr: "Verviers", com: "Saint-Vith", nom: "Klinik St. Josef", 
+        type: ["HOSP", "HOSP_SEMI", "ASSU"], 
+        lat: 50.276997572436954, lng: 6.127196454894516,
+        adr: "Klosterstraße 9, 4780 Sankt Vith", tel: "080/28.31.11",
+        territoire: "Sud de la Communauté Germanophone",
+        desc: "Service de psychiatrie en milieu hospitalier général (Bilingue FR/DE).",
+        services: "<b>— HOSPITALISATION RÉSIDENTIELLE —</b>\n" +
+	     "<b> Psychopathologies :</b> Dépendances (alcool, médicaments, drogues).\n Troubles de la personnalité.\n Psychose.\n Troubles anxieux et dépressifs.\n État de crise existentielle.\n de stress aigu et de PTSD.\n Pathologies gérontopsychiatriques.\n" +
+	     "<b> Mission :</b> Stabiliser la situation du patient et l’orienter vers une cellule de soin adapté \n\n" +
+	     "<b>— HOSPITALISATION DE JOUR —</b>\n" +
+	     "<b> Psychopathologies :</b> Troubles psychiques et Crises existentielles.\n" +
+	     "<b> Mission :</b> Aide à l'organisation et la structuration de votre quotidien, à la valorisation et le développement des ressources humaines, et à la réinsertion sociale et professionnelle. \n\n",
+	admis: " Hospi : 080/28.31.11 \n Service de jour (Eupen) : 087/59.83.00 \n Service de jour (Saint-Vith) : 080/85.41.48 ",
+    },
+    { 
+        arr: "Verviers", com: "Eupen", nom: "Hôpital psychiatrique de jour (Eupen).", 
+        type: "HOSP_SEMI", 
+        lat: 50.63169157312786, lng: 6.026129397243321,
+        adr: "VervierserStrasse 26, 4700 Eupen", tel: "087/59.83.00",
+        territoire: "Eupen",
+        desc: "Service de soins psychiatriques de jour - Cellule affiliée au HP Saint-Vith. (Bilingue FR/DE).",
+        services: "<b>— HOSPITALISATION DE JOUR —</b>\n" +
+	     "<b> Psychopathologies :</b> Troubles psychiques et Crises existentielles.\n" +
+	     "<b> Service :</b>Service mixte de diagnostic, suivi médical, psychothérapie individuelle et physiothérapie de groupe, ergo, sociothérapie, entretiens de famille.\n\n",
+	admis: "Service de jour (Eupen) : 087/59.83.00",
+    },
+    { 
+        arr: "Huy", com: "Huy", nom: "CHR de Huy (CHRH)", 
+        type: ["HOSP", "ASSU"], 
+        lat: 50.514102263344434, lng: 5.240262399085158,
+        adr: "Rue des Trois Ponts 2, 4500 Huy", tel: "085/27.27.27",
+        territoire: "Arrondissement de Huy",
+        desc: "Hospitalisation psychiatrique au sein du Centre Hospitalier Régional de Huy. Séjour de 3 semaines.",
+        services: "<b> Missions :</b> Traitement du sevrage (alcool, médicaments, cannabis).\n Mise au point diagnostique.\n Bilan psycho-social.\n Apaisement des crises\n" +
+	     "<b> Institutions s'inscrivant au suivi :</b> Groupe de soutien Assuétude.\n ALTIS asbl : soins et des services efficaces et accessibles aux personnes adultes souffrant de troubles psychiques.\n\n",
+	admis: "085/27.27.27 \n Pour toute demande en dehors des heures de Bureau : 085/27.74.01",
+    },
+    { 
+        arr: "Liège", com: "Liège", nom: "Clinique du stress : La Licorne", 
+        type: ["HOSP", "ASSU"], 
+        lat: 50.64763743535448, lng: 5.5712695395731995,
+        adr: "Voisinage des Cellites 12, 4000 - Liège", tel: "04/224.64.61",
+        territoire: "Arrondissement de Liège",
+        desc: "Hospitalisation psychiatrique au sein du Centre Hospitalier Régional de Huy. Séjour de 3 semaines.",
+        services: "<b> Missions :</b> Accompagnement adapté et spécifique en cas de stress aigu ou de PTSD.\n Propose un suivi pour chaque individu en détresse psychique suite au développement d'un stress continu. \n" +
+		  "<b> Public :</b> Adultes et adolescents.\n",
+	admis: "04.224.64.61",
+    },
+    // --- MAISONS DE SOINS PSYCHIATRIQUES (MSP) ---
+    { 
+        arr: "Waremme", com: "Waremme", nom: "MSP CHC Waremme", type: "MSP", 
+        lat: 50.691257576531626, lng: 5.2437638684111425, 
+        adr: "Rue de Sélys-Longchamps 47, 4300 Waremme", tel: "019/33.96.01 - 019/33.96.14",
+        territoire: "Hesbaye",
+        desc: "Maison de soins psychiatriques au sein du CHR de Waremme.",
+        services: "<b> Public :</b> Patients stabilisés et/ou en difficulté d'insertion sociale, relationnelle ou psycho-affective.\n"+
+	     "<b> Missions :</b> Le patient a un projet et il en est l'acteur.\n L'équipe pluridisciplinaire gravite autour du patient et l'accompagne dans son projet.\n Objectif : Développement des acquis de performance et de l'autonomie.\n\n",
+	admis: "019/33.96.01",
+    },
+    { 
+        arr: "Verviers", com: "Pepinster", nom: "MSP La Parenthèse", type: "HOSP_SEMI", 
+        lat: 50.581392976003265, lng: 5.839430633205303, 
+        adr: "Rue de Pepinster 76, ENSIVAL", tel: "087/26.08.60",
+        territoire: "Liège",
+        desc: "Hôpital de jour pour adolescents et jeunes adultes âgés de 15 à 24 ans en souffrance psychique",
+        services: "<b> Public :</b> Problématique émotionnelle, comportementale ou psychologique.\n Thérapies individuelles ou de groupe\n" +
+	     "<b> Public :</b> Thérapies individuelles ou de groupe\n" +
+	     "<b> Missions :</b> Amélioration du bien-être et Réinsertion dans le milieu de vie via le partage d’expériences en groupe et l’expérimentation d’outils thérapeutiques.\n Permet de travailler sur ses difficultés.\n\n",
+	admis: "087/26.08.60",
+    },
+];
+//---Assuétude---.
+var databaseAssu = [
+    { 
+        arr: "Liège", com: "Liège", nom: "Centre Alfa", type: "ASSU" , 
+        lat: 50.6443224489588, lng: 5.575808781902054,
+        adr: "Rue de la Madeleine, 17 4000 Liège", tel: "04/223.09.03",
+        territoire: "Provinces de Liège",
+        desc: "Prise en charge multidisciplinaire (médicale, psychologique, sociale) pour tout type d'assuétude (légales/illégales).",
+	services: "<b>— SERVICE THÉRAPEUTIQUE —</b>\n" +
+	     "<b> Public :</b> Prise ne charge d’adultes présentant des problèmes d’assuétude et/ou de santé mentale.\n" + 
+	     "<b> Approches :</b> TCC, Systémique, Psychodynamique.\n\n" +
+	     "<b>— SERVICE D'AIDE EN LIGNE —</b>\n" +
+	     "<b> www.aide-alcool.be </b> Gratuit, ouvert 24/24.\n" +
+	     "<b> Public :</b> Toute personne qui se questionnent par rapport à leur consommation d’alcool, ou celle d’un proche. \n" +
+	     "<b> Service :</b> Accompagnement en ligne (6 à 12 semaines).\n Accompagnement SelfHelpen ligne où le bénéficiaire se fixent leurs propres objectifs.\n\n",
+	admis: "Sur base volontaire",
+    },
+    { 
+        arr: "Liège", com: "Liège", nom: "Centre Alfa : RDR", type: "ASSU", 
+        lat: 50.64318893044755, lng: 5.576259210737473, 
+        adr: "Rue Cheravoie 1B, 4000 Liège.", tel: "04/370 60 44",
+        territoire: "Liège / Province",
+        desc: "Service réduction des risques et accueil des drogues.",
+	services: "<b>— RÉDUCTION DES RISQUES —</b>\n" +
+	     "<b> Public :</b> Toxicomanes\n" + 
+	     "<b> Service :</b> Prévention, Intervention, Orientation.\n Accueil et prise de contact en vue d'un suivi social.\n Antenne d'échange de seringues.\n",
+	admis: "Sur base volontaire",
+    },
+    { 
+        arr: "Waremme", com: "Hannut", nom: "Ombragé asbl", type: ["HOSP_SEMI", "ASSU", "MSP"], 
+        lat: 50.67295766210459, lng: 5.076723726081094,
+        adr: "Rue de Tirlemont 6, 4280 Hannut", tel: "019/51.56.26",
+        territoire: "Provinces de Waremme-Huy",
+	desc: "Service de formation, d'accueil et de prise en charge des assuétudes",
+        services: "<b>— SERVICE D'ACCUEIL : ANCRAGE —</b>\n" +
+	     "<b> Public :</b> Adultes consommateur de produits illicites ou licites. Inclusion des comportements addictifs de jeux en tous genre et cyber-addictions.\n" + 
+	     "<b> Service :</b> Service d’accueil de personnes souffrant d’addictions et de leurs proches.\n Prise en charge psychothérapeutique individuelle, de couple ou familiale.\n\n" +
+	     "<b>— CENTRE DE JOUR —</b>\n" +
+	     "<b> Coordonnées :</b> Tél: 0478/02.95.39 \n" +
+	     "<b> Public :</b> Toute personne adulte dépendante associé ou non à une souffrance psychique. \n" +
+	     "<b> Service :</b> Favoriser une intégration sociale et/ou professionnelle ainsi que diminuer les risques de consommation. \n\n" +
+	     "<b>— MAISON SUPERVISÉE —</b>\n" +
+	     "<b> Coordonnées :</b> Tél: 0478/02.95.39 \n" +
+	     "<b> Public :</b> Toute personne adulte dépendante associé ou non à une souffrance psychique. \n" +
+	     "<b> Service :</b> Apprentissage ou amélioration de l’autonomie des résidents. \n\n",
+	admis: "Sur base volontaire",
+    },
+    { 
+        arr: "Liège", com: "Liège", nom: "Centre Nadja asbl", type: "ASSU", 
+        lat: 50.6469163406968, lng: 5.570443239573171,
+        adr: "Rue Fond Saint-Servais 6, 4000 Liège", tel: "04/223.01.19",
+        territoire: "Provinces de Liège",
+	desc: "Service de Formation, d'accueil et d'accompagnement de personnes souffrantes d'assuétudes.",
+        services: "<b>— SERVICE THÉRAPEUTIQUE —</b>\n" +
+	     "<b> Public :</b> Toute personne présentant des problèmes d’assuétude à la drogue, médicaments, alcool, jeux et jeux vidéo.\n" + 
+	     "<b> Style thérapeutique :</b> Thérapies individuelles, familiales ou en groupe de soutien.\n mise en avant des ressources et au développement d’aptitudes, tant du consommateur que de son entourage (famille, professionnel, pairs, etc.).\n" +
+	     "<b> Objectifs :</b> Prévenir ou de prendre en charge les consommations problématiques.\n\n",
+	admis: "Sur base volontaire",
+    },
+    { 
+        arr: "Liège", com: "Seraing", nom: "Seraing 5", type: "ASSU", 
+        lat: 50.61148301214816, lng: 5.504404497242174,
+        adr: "Rue de la Province, 104 à 4100 Seraing", tel: "04/336.36.88",
+        territoire: "Commune de Seraing",
+	desc: "Service de Formation, d'accueil et d'accompagnement de personnes souffrantes d'assuétudes.",
+        services: "<b>— SERVICE THÉRAPEUTIQUE —</b>\n" +
+	     "<b> Public :</b> Toute  personne, domiciliée à Seraing, confrontée à un problème de consommation (drogues, alcool, médicaments, jeu, etc.) ainsi qu’aux personnes de l’ entourage.\n" + 
+	     "<b> Style thérapeutique :</b> Accompagnement psycho-social entièrement gratuit.\n\n",
+	admis: "Sur base volontaire",
+    },
+    { 
+        arr: "Huy", com: "Huy", nom: "Huy Clos", type: "ASSU", 
+        lat: 50.519802194474394, lng: 5.2437700818951,
+        adr: "Rue de la Résistance 2, 4500 Huy", tel: "085 23 66 03",
+        territoire: "Arrondissement de Huy",
+        desc: "Service d'accompagnement et de réduction des risques spécialisé.",
+        services: "<b>— SERVICE —</b>\n" +
+	     "<b> Public :</b> Toute  personne confrontée à un problème de consommation de psychotropes ainsi qu’aux personnes de l’entourage.\n" + 
+	     "<b> Style thérapeutique :</b> Accompagnement psycho-social entièrement gratuit.\n\n",
+	admis: "Sur base volontaire",
+    },
+    { 
+        arr: "Liège", com: "Liège", nom: "Start-Mass (ISoSL)", type: "ASSU", 
+        lat: 50.64990103934791, lng: 5.568848268408815,
+        adr: "Montagne Sainte-Walburge 22-26, 4000 Liège", tel: "04 224 63 08",
+        territoire: "Province de Liège",
+        desc: "Service d'accueil pour usager de drogues illicites composée d'une unité thérapeutique (Start) et une unité d’accueil (Mass).",
+        services: "<b>— START —</b>\n" +
+	     "<b> Public :</b> Usagers de drogues illicites majeurs, en marge de toute demande d’aide.\n" + 
+	     "<b> Service :</b> Accueil de jour dit de « bas seuil » et aide psychosociale.\n s’inscrit dans une philosophie de réduction des risques et des dommages socio sanitaires liés à l’abus des drogues.\n\n" +
+	     "<b>— MASS —</b>\n" +
+	     "<b> Public :</b> Tout bénéficiaire du service Start.\n" +
+	     "<b> Service :</b> Prise en charge à bas seuil (satisfaction des besoins primaires) à partir de laquelle nous proposons une offre de services, un accompagnement individualisé en fonction des besoins rencontrés).\n\n" +
+	     "<b>— E-BIS —</b>\n" +
+	     "<b> Public :</b> Usagers de drogues illicites majeurs, en marge de toute demande d’aide.\n" +
+	     "<b> Service :</b> Unité mobile de contacte de rue ayant pour but la réduction des risques et l'échange de seringues. \n\n",
+	admis: "Accroche via intervention de rue",
+    },
+    { 
+        arr: "Liège", com: "Flémalle-Haute", nom: "GAPpp", type: "ASSU", 
+        lat: 50.696099065593366, lng: 5.424388989247498,
+        adr: "Rue Spinette 2, 4400 Flémalle ", tel: "04/235.10.520 - 494/73.16.32",
+        territoire: "Commune de Flémalle-Haute",
+        desc: "service public communal ouvert à toute personne domiciliée à Flémalle confrontée, directement ou indirectement, aux conséquences d’une consommation problématique de psychotropes.",
+        services: "<b>— ACCOMPAGNEMENT PSYCHO-SOCIAL —</b>\n" +
+	     "<b> Public :</b> Consommateurs de psychotropes et leurs proches.\n" + 
+	     "<b> Service :</b> Suivi individuel, de couple ou familiale.\n\n",
+	admis: "Entretien sur prise de rendez-vous : 04/235.10.520 - 494/73.16.32",
+    },
+    { 
+        arr: "Liège", com: "Bressoux", nom: "CLEAN-ISoSL", type: ["ASSU", "MSP"], 
+        lat: 50.64889512866818, lng: 5.60825166840876,
+        adr: "Rue Nicolas Kinet 5-7, 4020 Bressoux", tel: "04/224.64.90 - 04/224.64.93",
+        territoire: "Arrondissement de Liège",
+        desc: "Centre thérapeutique de crise pour polytoxicomanes des deux sexes",
+	services: "<b>— ACCOMPAGNEMENT THÉRAPEUTIQUE —</b>\n" +
+	     "<b> Public :</b> Adultes toxicomanes.\n" + 
+	     "<b> Service :</b> Service de cure (1 mois) : encadrement 24/24.\n Suivi individuel, avec un encadrement par une équipe pluridisciplinaire.\n Préparation à une post-cure ou un projet de réinsertion.\n" +
+	     "<b> Objectifs :</b> Rupture progressive avec la substance via une coupure avec le milieu de consommation.\n\n",
+        admis: "04/224.64.90",
+    },
+    { 
+        arr: "Liège", com: "Liège", nom: "CAP Fly", type: "ASSU", 
+        lat: 50.65256912035897, lng: 5.5952940395735,
+        adr: "Rue du Ruisseau 17, 4000 Liège ", tel: "04/228.07.04",
+        territoire: "Liège - Quartiers Nord",
+        desc: "Centre ambulatoire pluridisciplinaire",
+	services: "<b>— ACCOMPAGNEMENT PLURIDISCIPLINAIRE —</b>\n" +
+	     "<b> Public :</b> consommateurs d’opiacés, de cocaïne et/ou de substances associées, et leurs proches.\n" + 
+	     "<b> Service :</b> Accompagnement thérapeutique.\n" +
+	     "<b> Objectifs :</b> Assurer l’inscription des personnes dépendantes dans un circuit de soins.\nRéduire les risques liés aux assuétudes.\nAssurer une écoute et un soutien aux familles. \n\n",
+        admis: "04 228.07.04",
+    },
+    { 
+        arr: "Liège", com: "Liège", nom: "La Teignouse - Assuétude", type: "ASSU", 
+        lat: 50.474291461761695, lng: 5.671643239563559,
+        adr: "Avenue François Cornesse 61 4920 Aywaille", tel: "04/384.44.60 - Urgences : 0477/49.65.97",
+        territoire: "Communes de la zone Ourthe-Amblève-Condroz",
+        desc: "Service d'accueil, d'accompagnement et de soutien aux consommateurs de produits licites ou illicites.",
+	services: "<b>— ACCOMPAGNEMENT PSYCHO-SOCIAL —</b>\n" +
+	     "<b> Public :</b> Personnes présentant des dépendances de produits, licites (alcool,tabac,médicaments,jeux...) ou illicites, qui engendrent des difficultés relationnelles, professionnelles, etc.\n Proches de consommateurs.\n Personnes s'interrogeant sur leur consommation.\n" + 
+	     "<b> Accompagnement :</b> Réflexion sur la consommation des produits et la situation de vie.\n Soutien dans la mise en place d'un projet individualisé.\n Prise en charge des patients avec traitements compensatoires.\n\n",
+        admis: "04/384.44.60 - Urgences : 0477/49.65.97",
+    },
+    { 
+        arr: "Verviers", com: "Malmedy", nom: "Centre de cure : Les Hautes Fagnes", type: ["ASSU", "MSP"], 
+        lat: 50.43717981793763, lng: 6.02533032916323,
+        adr: "Rue Malgrave 1 4960 Malmedy", tel: "080/79.98.30",
+        territoire: "Arrondissement de Verviers",
+        desc: "Centre de cure et de postcure spécialisé dans la réadaptation psychosociale de personnes dépendantes (alcool, drogues, médicaments).",
+	services: "<b>— ACCOMPAGNEMENT THÉRAPEUTIQUE —</b>\n" +
+	     "<b> Public :</b> Personne ayant des difficultés de dépendance (tous types).\n" + 
+	     "<b> Accompagnement :</b> Programme détaillé selon quatre axes.\n • Programme Relationnel : Vise à diminuer la pulsion à consommer, en favorisant plus de souplesse, de créativité, de réalisme dans les capacités relationnelles des personnes.\n • Accompagnement Psycho-social.\n • Programme Social et Familiale : suivi adapté à la situation du bénéficiaire.\n • Programme Médicale : Phase de sevrage physique.\n\n",	
+        admis: "Sur base volontaire : 080/79.98.30",
+    },
+    { 
+        arr: "Verviers", com: "Verviers", nom: "Espace ConVergences (Adulte)", type: ["ASSU", "GROUPE-ENTREAIDE"], 
+        lat: 50.593866020441936, lng: 5.865760854912181,
+        adr: "Rue Ortmans-Hauzeur 42, 4800 Verviers", tel: "0473.26.09.13",
+        territoire: "Arrondissement de Verviers",
+        desc: "Service spécialisé dans l’accompagnement des consommations et des addictions.",
+	services: "<b>— ACCOMPAGNEMENT PSYCHO-SOCIAL ET MÉDICALE —</b>\n" +
+	     "<b> Public :</b> Adultes souffrants de dépendante (tous types).\n" + 
+	     "<b> Accompagnement :</b> Entièrement gratuit.\n Mise au point d'un parcours de soin adapté (médicale, psychologique, prise en charge de l'entourage).\n" +
+	     "<b>— GROUPE DE SOUTIEN —</b>\n" +
+	     "<b> Rebond :</b> Groupe de parole/thérapeutique autour des consommations (2 vendredis par mois de 13h30 à 15h30).\n" +
+	     "<b> Espace Proche :</b> Groupe de parole destiné à l’entourage de personnes consommatrices (2ème jeudi du mois de 18h à 20h).\n\n",
+        admis: "Lors de permanences (les mardis le 13h30 à 15h30) ou par téléphone : 0473.26.09.13",
+    }
+];
+//---SSM---.
+var databaseSSM = [
+    // --- LIÈGE CENTRE & QUARTIERS ---
+    { 
+        arr: "Liège", com: "Liège", nom: "Accolade - Isosl", type: ["SSM"], 
+        lat: 50.62033425918854, lng: 5.552210995498348,
+        adr: "Rue des Bruyères 127-129, 4000 Liège", tel: "04/227.36.41",
+        territoire: "Commune de Liège : Rassemble les services Franchimontois, Saint-Christophe et Angleur",
+        desc: "Structure ambulatoire caractérisée par une approche pluridisciplinaire.",
+	services: "<b>— DEUX ÉQUIPES DE SOINS —</b>\n" +
+	     "<b> Première Équipe :</b> Enfants et Adolescents.\n" + 
+	     "<b> Deuxième Équipe :</b> Adultes.\n" +
+	     "<b> Équipes secondées dans leur offre de soins :</b> Club Thérapeutique - Club Réflexions - Fil à fil.\n" +
+	     "<b>— INFORMATIONS PRATIQUES —</b>\n" +
+	     "<b> Prix de consultation :</b> 10 euros maximum.\n Chaque situation sera examinée au cas par cas et le tarif adapté si nécessaire.\n\n",
+        admis: "Sur base volontaire : 04/227.36.41",
+    },
+    { 
+        arr: "Liège", com: "Liège", nom: "Club André Baillon - SSM", type: ["SSM", "IHP"], 
+        lat: 50.64536400184971, lng: 5.55969052607953, 
+        adr: "Rue des Fontaines Roland 9, 4000   Liège.", tel: "04/221.18.50",
+        territoire: "Quartier de Liège : Sainte-Walburge, Sainte-Marguerite (Saint-Laurent), Glain, Jonfosse, Saint-Gilles (haut), Laveu. ",
+        desc: "Service de Santé Mentale",
+	services: "<b>— ACCOMPAGNEMENT —</b>\n" +
+	     "<b> Public :</b> Toute demande liée à une souffrance psychologique et/ou psychiatrique.\n\n" +
+	     "<b>— INITIATIVE D'HABITATION PROTÉGÉE —</b>\n" +
+	     "<b> Public :</b> personnes adultes en difficultés d’ordre psychiatrique ou psychologique, ne se sentant pas ou plus capables de vivre seules\n" +
+	     "<b> Mission :</b> Diminuer leur sentiment de solitude.\n Autonomisation.\n Confiance en soi.\n" +
+	     "<b> Séjour et Admission :</b> 1 mois, renouvelable. Tél: 04/233.70.09\n\n",
+        admis: "Sur base volontaire : 04/221.18.50",
+    },
+    { 
+        arr: "Liège", com: "Liège", nom: "Club André Baillon - SAM", type: "SSM", 
+        lat: 50.64307574551915, lng: 5.602920768408436, 
+        adr: "Rue du Moulin, 217 4020 BRESSOUX", tel: "04/221.18.50",
+        territoire: "Arrondissement de Liège.",
+        desc: "Service d’accrochage au milieu de vie.",
+	services: "<b>— ACCOMPAGNEMENT —</b>\n" +
+	     "<b> Public :</b> Bénéficiaires en souffrance psychiatrique, nécessitant une prise en charge globale\n Bénéficiaires déliées socialement, et en grande perte d’autonomie.\n" +
+	     "<b> Objectif :</b> Améliorer la qualité de vie de l’usager en construisant une intervention sur base de son milieu de vie.\n\n",
+        admis: "Sur base volontaire : 04/221.18.50",
+    },
+    { 
+        arr: "Liège", com: "Liège", nom: "ASBL Tabane", type: "SSM", 
+        lat: 50.65595, lng: 5.59254,
+        adr: "Rue Saint-Léonard 510, 4000 Liège", tel: "04/228.12.71",
+        territoire: "Arrondissement de Liège.",
+        desc: "Service de Santé mentale spécialisé dans l’accueil des personnes Migrantes.",
+	services: "<b>— ACCOMPAGNEMENT —</b>\n" +
+	     "<b> Public :</b> Migrants en grande souffrance psychique.\n" +
+	     "<b> Objectif :</b> Prise en charge des bénéficiaires de soin dans leur langue et dans le respect de leurs appartenances et représentations diverses.\n\n",
+        admis: "Sur base volontaire : 04/221.18.50",
+    },
+    { 
+        arr: "Liège", com: "Liège", nom: "SIAJEF", type: ["SSM", "IHP"], 
+        lat: 50.648928422859925, lng: 5.58624556840877, 
+        adr: "Rue Maghin 19, 4000 Liège", tel: "04/228.98.98",
+        territoire: "Quartier de Liège : Saint-Léonard, Jolivet, Coronmeuse, Thier-à-Liège, Outremeuse, Sainte-Walburge, Boverie, Jonfosse, le centre et l’hypercentre de Liège ",
+        desc: "Service de Santé mentale spécialisé",
+	services: "<b>— ACCOMPAGNEMENT —</b>\n" +
+	     "<b> Public :</b> Toute demande liée à une souffrance psychologique et/ou psychiatrique.\n" +
+	     "<b> Service :</b> Soins au sein de l’institution ou à domicile.\n Existence de soins ambulatoire pour les Bénéficiaires de l'institution. \n\n",
+        admis: "Sur base volontaire : 04/228.98.98",
+    },
+    { 
+        arr: "Liège", com: "Liège", nom: "Clips (AIGS)", type: "SSM", 
+        lat: 50.6460002666189, lng: 5.59083475306666, 
+        adr: "Rue Alex Bouvy 18, 4020 Liège", tel: "04/341.29.92",
+        territoire: "Arrondissement de Liège.",
+        desc: "Service de Santé mentale",
+	services: "<b>— ACCOMPAGNEMENT —</b>\n" +
+	     "<b> Public :</b> Toute demande liée à une souffrance psychologique et/ou psychiatrique.\n" +
+	     "<b> Service :</b> Offre également des soins en ambulatoire.\n\n",
+        admis: "Sur base volontaire : 04/341.29.92",
+    },
+    { 
+        arr: "Liège", com: "Liège", nom: "CPVS", type: "SSM", 
+        lat: 50.62271414439779, lng: 5.636310926078269, 
+        adr: "Rue de Gaillarmont 600, 4032 Chênée", tel: "04/323.93.11",
+        territoire: "Province de Liège.",
+        desc: "Centre de prise en charge des violences sexuelles.",
+	services: "<b>— ACCOMPAGNEMENT —</b>\n" +
+	     "<b> Public :</b> Victimes de violences sexuelles.\n" +
+	     "<b> Service :</b> Prise en charge médicale et psychothérapeutique aux victimes.\n\n",
+        admis: "Sur base volontaire : 04/323.93.11",
+    },
+    { 
+        arr: "Liège", com: "Jupille", nom: "SSM Jupille (AIGS)", type: "SSM", 
+        lat: 50.635604567150914, lng: 5.625618954914452, 
+        adr: "Cité André Renard 15, 4020 Jupille", tel: "04/365.12.37",
+	territoire: "Commune de Jupille",
+        desc: "Service de santé mentale.",
+	services: "<b>— ACCOMPAGNEMENT —</b>\n" +
+	     "<b> Public :</b> Toute personne en difficulté psychologique, psychiatrique et/ou social. \n" +
+	     "<b> Service :</b> Prise en charge psychothérapeutique.\n\n",
+        admis: "Sur base volontaire : 04/365.12.37",
+    },
+    { 
+        arr: "Liège", com: "Herstal", nom: "SSM Herstal (AIGS)", type: "SSM", 
+        lat: 50.65902050633488, lng: 5.6226335530673595, 
+        adr: "Rue Saint Lambert 84, 4040 Herstal", tel: "04/240.04.08",
+        territoire: "Commune de Herstal",
+        desc: "Service de santé mentale.",
+	services: "<b>— ACCOMPAGNEMENT —</b>\n" +
+	     "<b> Public :</b> Toute personne en difficulté psychologique, psychiatrique et/ou social. \n" +
+	     "<b> Service :</b> Prise en charge psychothérapeutique.\n\n",
+        admis: "Sur base volontaire : 04/240.04.08",
+    },
+    { 
+        arr: "Liège", com: "Visé", nom: "SSM Les Olivines", type: "SSM", 
+        lat: 50.73594697642909, lng: 5.699810495400724, 
+        adr: "Rue de la Fontaine 51, 4600 Visé", tel: "04/379.39.36",
+        territoire: "Commune de Visée",
+        desc: "Service de santé mentale.",
+	services: "<b>— ACCOMPAGNEMENT —</b>\n" +
+	     "<b> Public :</b> Toute personne en difficulté psychologique, psychiatrique et/ou social. \n" +
+	     "<b> Service :</b> Prise en charge psychothérapeutique.\n\n",
+        admis: "Sur base volontaire : 04/379.39.36",
+    },
+    { 
+        arr: "Liège", com: "Seraing", nom: "SSM de Seraing-Ougrée-Jemeppe", type: "SSM", 
+        lat: 50.61505578009078, lng: 5.50918916840689, 
+        adr: "Rue Hya 71, 4100 Seraing", tel: "Seraing: 04/337.20.64\n Jemeppe: 04/231.10.42\n Ougrée: 04/337.49.53",
+        territoire: "Commune de Seraing, Ougrée, Jemeppe",
+        desc: "Service de santé mentale.",
+	services: "<b>— ACCOMPAGNEMENT —</b>\n" +
+	     "<b> Public :</b> Toute personne en difficulté psychologique, psychiatrique et/ou social. \n" +
+	     "<b> Service :</b> Prise en charge psychothérapeutique.\n\n",
+        admis: "Seraing: 04/337.20.64 - Jemeppe: 04/231.10.42 - Ougrée: 04/337.49.53",
+    },
+    { 
+        arr: "Liège", com: "Flémalle", nom: "SSM Flémalle", type: "SSM", 
+        lat: 50.59859073372132, lng: 5.461875554912403, 
+        adr: "Rue Spinette 2, 4400 Flémalle", tel: "04/235.10.50",
+        territoire: "Commune de Flémalle",
+        desc: "Service de santé mentale.",
+	services: "<b>— ACCOMPAGNEMENT —</b>\n" +
+	     "<b> Public :</b> Toute personne en difficulté psychologique, psychiatrique et/ou social. \n" +
+	     "<b> Service :</b> Prise en charge psychothérapeutique.\n\n",
+        admis: "Sur base volontaire : 04/235.10.50",
+    },
+    { 
+        arr: "Huy", com: "Nandrin", nom: "SSM Nandrin", type: "SSM", 
+        lat: 50.507501044448226, lng: 5.41980102422344, 
+        adr: "Place Arthur Botty 1, 4550 Nandrin", tel: "085/51.24.15",
+        territoire: "Commune de Nandrin",
+        desc: "Service de santé mentale.",
+	services: "<b>— ACCOMPAGNEMENT —</b>\n" +
+	     "<b> Public :</b> Toute personne en difficulté psychologique, psychiatrique et/ou social. \n" +
+	     "<b> Service :</b> Prise en charge psychothérapeutique.\n\n",
+        admis: "Sur base volontaire : 085/51.24.15",
+    },
+    { 
+        arr: "Huy", com: "Huy", nom: "SSM de Huy", type: "SSM", 
+        lat: 50.51759875222811, lng: 5.239673839565983, 
+        adr: "Rue de la Fortune 6, 4500 Huy", tel: "085/25.42.26",
+	territoire: "Commune de Huy",
+        desc: "Service de santé mentale.",
+	services: "<b>— ACCOMPAGNEMENT —</b>\n" +
+	     "<b> Public :</b> Toute personne en difficulté psychologique, psychiatrique et/ou social. \n" +
+	     "<b> Service :</b> Prise en charge psychothérapeutique.\n\n",
+        admis: "Sur base volontaire : 085/25.42.26",
+    },
+    { 
+        arr: "Waremme", com: "Waremme", nom: "SSM Waremme", type: "SSM", 
+        lat: 50.69632797924491, lng: 5.256612510740435, 
+        adr: "Avenue Guillaume Joachim 49, 4300 Waremme", tel: "019/32.47.92",
+        territoire: "Commune de Waremme",
+        desc: "Service de santé mentale.",
+	services: "<b>— ACCOMPAGNEMENT —</b>\n" +
+	     "<b> Public :</b> Toute personne en difficulté psychologique, psychiatrique et/ou social. \n" +
+	     "<b> Service :</b> Prise en charge psychothérapeutique.\n\n",
+        admis: "Sur base volontaire : 019/32.47.92",
+    },
+
+    // --- VERVIERS & EST ---
+    { 
+        arr: "Verviers", com: "Verviers", nom: "SSM Verviers", type: ["ASSU","SSM","REINSER"], 
+        lat: 50.58751797109353, lng: 5.856152839569837, 
+        adr: "Rue de Dinant 20-22, 4800 Verviers", tel: "087/22.16.45",
+        territoire: "Commune de Verviers",
+        desc: "Service de santé mentale.",
+	services: "<b>— CONSULTATIONS PSYCHOLOGIQUES —</b>\n" +
+	     "<b> Public :</b> Adultes en difficulté psychologique, psychiatrique et/ou social. \n" +
+	     "<b> Service :</b> Toute forme de suivi psychologique, social et/ou médical relevant de la souffrance psychique et/ou de la maladie mentale.\n - Consultations médicales.\n - Psychothérapies individuelles\n - Prises en charge sociales\n - Thérapies familiales et de couple\n - Thérapie sous hypnose \n\n" +
+	     "<b>— CONSULTATIONS AVAT (Assuétude) —</b>\n" +
+	     "<b> Public :</b> Toute personne dès l’âge de 16 ans présentant ou ayant présenté une assuétude. \n" +
+	     "<b> Service :</b> Une prise en charge ambulatoire pluridisciplinaire, et si nécessaire, une orientation vers un lieu résidentiel de cure.\n Examen psychiatrique - Thérapies individuelles, de couple, de famille - Guidance sociale.\n Suivi de la postcure.\n\n" +
+	     "<b>— CONSULTATIONS ETHNOPSYCHIATRIQUES —</b>\n" +
+	     "<b> Public :</b> Personnes migrantes ou exilées présentant des désordres psychologiques ou psychopathologiques dans la langue du patient (Setis).\n" +
+	     "<b> Service :</b> Traitement ambulatoire des souffrances psychiques liées à l'exil.\n\n" +
+ 	     "<b>— AUTEURS D'INFRACTIONS À CARACTÈRE SEXUEL —</b>\n" +
+	     "<b> Public :</b> Auteurs d'Infractions à Caractère Sexuel.\n" +
+	     "<b> Service :</b> Guidance et traitement.\n" +
+	     "<b> Tél :</b> 087/22.38.78 \n\n" +
+	     "<b>— CENTRE PSYCHOTHÉRAPEUTIQUE DE JOUR —</b>\n" +
+	     "<b> Public :</b> Toute personne adulte, souffrant de difficultés psychiques importantes, entrainant une désinsertion sociale, familiale ou professionnelle.\n" +
+	     "<b> Service :</b> Traitement des personnes souffrant de troubles psycho-pathologiques afin de les réinscrire dans leur réseau social.\n" +
+	     "<b> Tarif :</b> Entre 8 et 21 € selon les revenus.\n\n",
+        admis: "Sur base volontaire : 087/22.16.45",
+    },
+    { 
+        arr: "Liège", com: "Saint-Nicolas", nom: "Le Taquet", type: "SSM", 
+        lat: 50.645686137960574, lng: 5.527106712586049, 
+        adr: "Chaussée Churchill 28, 4420 Saint-Nicolas", tel: "04/364.06.85 ",
+        territoire: "Montegnée",
+        desc: "Service de santé mentale.",
+	services: "<b>— ACCOMPAGNEMENT —</b>\n" +
+	     "<b> Public :</b> Toute personne en difficulté psychologique, psychiatrique et/ou social. \n" +
+	     "<b> Service :</b> Prise en charge psychothérapeutique.\n\n",
+        admis: "Sur base volontaire : 04/364.06.85",
+    },
+    { 
+        arr: "Liège", com: "Trooz", nom: "SSM de Trooz", type: "SSM", 
+        lat: 50.57824689858992, lng: 5.674795683746792, 
+        adr: "Grand rue 64, 4870 Trooz", tel: "04/351.77.18",
+        territoire: "Trooz",
+        desc: "Service de santé mentale.",
+	services: "<b>— ACCOMPAGNEMENT —</b>\n" +
+	     "<b> Public :</b> Toute personne en difficulté psychologique, psychiatrique et/ou social. \n" +
+	     "<b> Service :</b> Prise en charge psychothérapeutique.\n\n",
+        admis: "Sur base volontaire : 04/351.77.18",
+    },
+    { 
+        arr: "Liège", com: "Beyne-Heusay", nom: "SSM de Beyne-Heusay", type: "SSM", 
+        lat: 50.62146143543543, lng: 5.656218983749143, 
+        adr: "Grand Route 306, 4610 Beyne-Heusay", tel: "04/365.12.37 - 0491/15.03.48",
+        territoire: "Beyne-Heusay",
+        desc: "Service de santé mentale.",
+	services: "<b>— ACCOMPAGNEMENT —</b>\n" +
+	     "<b> Public :</b> Toute personne en difficulté psychologique, psychiatrique et/ou social. \n" +
+	     "<b> Service :</b> Prise en charge psychothérapeutique.\n\n",
+        admis: "Sur base volontaire : 04/365.12.37",
+    },
+    { 
+        arr: "Verviers", com: "Malmedy", nom: "L'Espoir (SSM)", type: "SSM", 
+        lat: 50.42399983127288, lng: 6.023166268396244,
+        adr: "Rue Saint-Quirin 9, 4960 Malmedy", tel: "080/33.81.65",
+        territoire: "6 communes : Malmédy, Stavelot, Waimes, Stoumont, Trois-Pont, Lierneux.",
+        desc: "Service de santé mentale.",
+	services: "<b>— ACCOMPAGNEMENT —</b>\n" +
+	     "<b> Public :</b> Toute personne en difficulté psychologique, psychiatrique et/ou social. \n" +
+	     "<b> Service :</b> Prise en charge psychothérapeutique.\n\n",
+        admis: "Sur base volontaire : 080/33.81.65",
+    },
+    { 
+        arr: "Liège", com: "Comblain-au-Pont", nom: "L'Amblève (SSM)", type: "SSM", 
+        lat: 50.47648, lng: 5.57531, 
+        adr: "Rue d'Aywaille 22, 4170 Comblain-au-Pont", tel: "04/369.23.23",
+        territoire: "Comblain-au-Pont",
+        desc: "Service de santé mentale.",
+	services: "<b>— ACCOMPAGNEMENT —</b>\n" +
+	     "<b> Public :</b> Toute personne en difficulté psychologique, psychiatrique et/ou social. \n" +
+	     "<b> Service :</b> Prise en charge psychothérapeutique.\n\n",
+        admis: "Sur base volontaire : 04/369.23.23",
+    },
+    { 
+        arr: "Liège", com: "Liège", nom: "SSM La Source", type: "SSM", 
+        lat: 50.70883426666785, lng: 5.616407197247577, 
+        adr: "Rue du Ponçay 1, 4680 Oupeye", tel: "04/264.33.09",
+        territoire: "Hermée.",
+        desc: "Service de santé mentale.",
+	services: "<b>— ACCOMPAGNEMENT —</b>\n" +
+	     "<b> Public :</b> Toute personne en difficulté psychologique, psychiatrique et/ou social. \n" +
+	     "<b> Service :</b> Prise en charge psychothérapeutique.\n\n",
+        admis: "Sur base volontaire : 04/264.33.09",
+    },
+    { 
+        arr: "Waremme", com: "Hannut", nom: "SSM de Hannut", type: ["ASSU","SSM"], 
+        lat: 50.671192965566206, lng: 5.074510526080986, 
+        adr: "Rue Zénobe Gramme 48, 4280 Hannut. ", tel: "019/51.29.66",
+        territoire: "Hannut",
+        desc: "Service de santé mentale.",
+	services: "<b>— ACCOMPAGNEMENT —</b>\n" +
+	     "<b> Public :</b> Toute personne en difficulté psychologique, psychiatrique et/ou social. \n" +
+	     "<b> Service :</b> Prise en charge psychothérapeutique.\n" +
+	     "<b>— GÉNÉRATION ASSUÉTUDE —</b>\n" +
+	     "<b> Public :</b> Jeunes présentant des difficultés en terme d'assuétudes. \n\n",
+        admis: "Sur base volontaire : 019/51.29.66",
+    },
+    { 
+        arr: "Liège", com: "Blegny", nom: "SSM de Blegny", type: "SSM", 
+        lat: 50.67226055839765, lng: 5.724463124232653, 
+        adr: "Place Sainte-Gertrude 1a, 4670 Blegny", tel: "04/387.56.15",
+        territoire: "Hermée.",
+        desc: "Service de santé mentale.",
+	services: "<b>— ACCOMPAGNEMENT —</b>\n" +
+	     "<b> Public :</b> Toute personne en difficulté psychologique, psychiatrique et/ou social. \n" +
+	     "<b> Service :</b> Prise en charge psychothérapeutique.\n\n",
+        admis: "Sur base volontaire : 04/387.56.15",
+    },
+    { 
+        arr: "Liège", com: "Soumagne", nom: "SSM de Soumagne", type: "SSM", 
+        lat: 50.62380471430168, lng: 5.739576881900903, 
+        adr: "Rue De L'égalité 250, 4630 Soumagne ", tel: "04/377.46.65 - 0498/90.03.21",
+        territoire: "Hermée.",
+        desc: "Service de santé mentale.",
+	services: "<b>— ACCOMPAGNEMENT —</b>\n" +
+	     "<b> Public :</b> Toute personne en difficulté psychologique, psychiatrique et/ou social. \n" +
+	     "<b> Service :</b> Prise en charge psychothérapeutique.\n\n",
+        admis: "Sur base volontaire : 04/377.46.65",
+    },
+    { 
+        arr: "Liège", com: "Liège", nom: "Sygma", type: "SSM", 
+        lat: 50.630000600171236, lng: 5.558892783749644, 
+        adr: "Rue Jacob Makoy 57, 4000 Liège", tel: "04/252.53.39",
+        territoire: "Liège",
+        desc: "Service de santé mentale.",
+	services: "<b>— ACCOMPAGNEMENT —</b>\n" +
+	     "<b> Public :</b> Auteurs d'infraction à caractère sexuel.\n" +
+	     "<b> Service :</b> Guidance et traitement.\n\n",
+        admis: "Sur base volontaire : 04/252.53.39",
+    },
+];
+var databasePostHosp = [
+    // --- INITIATIVES D'HABITATION PROTÉGÉE (IHP) ---
+    { 
+        arr: "Liège", com: "Liège", nom: "IHP Isosl", type: "IHP", 
+        lat: 50.62015, lng: 5.55224, 
+        adr: "Rue Pont Saint Nicolas 2, 4020 Liège", tel: "04/224.64.53",
+        territoire: "Liège",
+        desc: "15 Maisons ordinaires disposant de 3 à 7 places, elles sont disséminées sur le territoire de la Ville de Liège",
+	services: "<b>— SERVICE —</b>\n" +
+	     "<b> Public :</b> Adultes rencontrant une difficulté d’ordre psychique ou psychiatrique souhaitant accroître leur autonomie, reprendre confiance en eux ou re-créer du lien social.\n" +
+	     "<b> Service :</b> Accompagnement dans l'acquisition d'outils.\n Accompagnement psycho-social.\n\n",
+	admis: "04/224.64.53",
+    },
+    { 
+        arr: "Liège", com: "Liège", nom: "IHP Liprolo (SIAJEF)", type: "IHP", 
+        lat: 50.652939503317526, lng: 5.591939626079954, 
+        adr: "Rue Vivegnis 295, 4000 Liège", tel: "04/228.98.98 - 04/227.64.70",
+        territoire: "Liège",
+	desc: "lieu de transition permettant de reprendre un rythme de vie structurant.",
+	services: "<b>— SERVICE —</b>\n" +
+	     "<b> Public :</b> Adultes rencontrant une difficulté d’ordre psychique ou psychiatrique souhaitant accroître leur autonomie, reprendre confiance en eux ou re-créer du lien social.\n" +
+	     "<b> Service :</b> Accompagnement dans l'acquisition d'outils.\n Accompagnement psycho-social.\n\n",
+	admis: "04/228.98.98. Procédure de plusieurs mois.",
+    },
+    { 
+        arr: "Liège", com: "Aywaille", nom: "IHP Ourthe-Amblève", type: "IHP", 
+        lat: 50.470153112580604, lng: 5.673430696980496, 
+        adr: "Rue Aux Petites Croix 6, 4920 Aywaille", tel: "04/384.67.73 - 0473/98.11.75",
+        territoire: "Liège",
+        desc: "lieu de transition permettant de reprendre un rythme de vie structurant.",
+	services: "<b>— SERVICE —</b>\n" +
+	     "<b> Public :</b> Adultes rencontrant une difficulté d’ordre psychique ou psychiatrique souhaitant se réinsérer socialement.\n" +
+	     "<b> Contre-indications :</b> conduites entraînant des comportements antisociaux et perturbant la vie communautaire.\n\n",
+	admis: "04/384.67.73",
+    },
+    { 
+        arr: "Huy", com: "Huy", nom: "IHP - ALTIS", type: "IHP", 
+        lat: 50.51564761415481, lng: 5.239566610730353, 
+        adr: "Rue Saint Domitien 13, 4500 Huy", tel: "085/51.45.51",
+        territoire: "Arrondissement de Huy et Waremme",
+        services: "<b>— SERVICE —</b>\n" +
+	     "<b> Public :</b> Adultes rencontrant une difficulté d’ordre psychique ou psychiatrique souhaitant se réinsérer socialement.\n" +
+	     "<b> Service :</b> Encadrement en fonction des compétences de chacun.\n Travaille en partenariat avec le réseau social, familial et thérapeutique des résidents.\n\n",
+	admis: "085/51.45.51",
+    },
+    { 
+        arr: "Verviers", com: "Verviers", nom: "IHP Le Hall", type: "IHP", 
+        lat: 50.58963530318789, lng: 5.851164754911939, 
+        adr: "Rue aux Laines 54-56, 4800 Verviers", tel: "087/67.54.70 - 0494/47.89.29",
+        territoire: "Verviers",
+        services: "<b>— SERVICE —</b>\n" +
+	     "<b> Public :</b> Adultes rencontrant une difficulté d’ordre psychique ou psychiatrique souhaitant se réinsérer socialement.\n" +
+	     "<b> Service :</b> Accompagnement dans l'acquisition d'outils.\n Accompagnement psycho-social.\n\n",
+	admis: "087/67.54.70",
+    },
+    { 
+        arr: "Verviers", com: "Malmedy", nom: "IHP Fagnes-Ardennes", type: "IHP", 
+        lat: 50.42540186533242, lng: 6.032881061567064, 
+        adr: "Rue de la Gare 12, 4690 Malmedy", tel: "080/77.14.22",
+        territoire: "Malmedy, Stavelot, Lierneux et Vielsalm",
+        services: "<b>— SERVICE —</b>\n" +
+	     "<b> Public :</b> Adultes rencontrant une difficulté d’ordre psychique ou psychiatrique souhaitant se réinsérer socialement.\n" +
+	     "<b> Service :</b> Chacun gère son quotidien.\n Accompagnement dans l'acquisition d'outils.\n Accompagnement psycho-social.\n\n",
+	admis: "080/77.14.22",
+    },
+    { 
+        arr: "Liège", com: "Liège", nom: "IHP1 de L'Essor - CHS Notre-Dame des Anges", type: "IHP", 
+        lat: 50.64685204722266, lng: 5.5462715242312255, 
+        adr: "Rue en Glain 46, 4000 Liège ", tel: "04/224.72.11",
+        territoire: "Commune de Liège",
+        services: "<b>— SERVICE —</b>\n" +
+	     "<b> Public :</b> Adultes rencontrant une difficulté d’ordre psychique ou psychiatrique souhaitant se réinsérer socialement.\n" +
+	     "<b> Service :</b> Chacun gère son quotidien.\n Accompagnement dans l'acquisition d'outils.\n Accompagnement psycho-social.\n\n",
+	admis: "04/224.72.11",
+    },
+    { 
+        arr: "Liège", com: "Liège", nom: "IHP2 de L'Essor - CHS Notre-Dame des Anges", type: "IHP", 
+        lat: 50.64680683155184, lng: 5.530143897244146, 
+        adr: "Rue Félix Vandersnoeck 46, 4000 Liège ", tel: "04/224.72.11",
+        territoire: "Commune de Liège",
+        services: "<b>— SERVICE —</b>\n" +
+	     "<b> Public :</b> Adultes rencontrant une difficulté d’ordre psychique ou psychiatrique souhaitant se réinsérer socialement.\n" +
+	     "<b> Service :</b> Chacun gère son quotidien.\n Accompagnement dans l'acquisition d'outils.\n Accompagnement psycho-social.\n\n",
+	admis: "04/224.72.11",
+    },
+    { 
+        arr: "Liège", com: "Liège", nom: "IHP3-4 de L'Essor - CHS Notre-Dame des Anges", type: "IHP", 
+        lat: 50.64282135748365, lng: 5.556678010737483, 
+        adr: "Rue Hullos 100-102, 4000 Liège ", tel: "04/224.72.11",
+        territoire: "Commune de Liège",
+        services: "<b>— SERVICE —</b>\n" +
+	     "<b> Public :</b> Adultes rencontrant une difficulté d’ordre psychique ou psychiatrique souhaitant se réinsérer socialement.\n" +
+	     "<b> Service :</b> Chacun gère son quotidien.\n Accompagnement dans l'acquisition d'outils.\n Accompagnement psycho-social.\n\n",
+	admis: "04/224.72.11",
+    },
+    { 
+        arr: "Liège", com: "Liège", nom: "IHP5 de L'Essor - HJ La Clé", type: "IHP", 
+        lat: 50.64350385156623, lng: 5.587698326079449, 
+        adr: "Rue des Bonnes Villes, 12 4000 Liège", tel: "04/224.72.11",
+        territoire: "Commune de Liège",
+        services: "<b>— SERVICE —</b>\n" +
+	     "<b> Public :</b> Adultes rencontrant une difficulté d’ordre psychique ou psychiatrique souhaitant se réinsérer socialement.\n" +
+	     "<b> Service :</b> Chacun gère son quotidien.\n Accompagnement dans l'acquisition d'outils.\n Accompagnement psycho-social.\n\n",
+	admis: "04/224.72.11",
+    },
+    { 
+        arr: "Liège", com: "Liège", nom: "IHP6 de L'Essor - HJ La Clé", type: "IHP", 
+        lat: 50.64748854194199, lng: 5.5957449395731995, 
+        adr: "Quai Godefroid Kurth, 88 4020 Liège", tel: "04/224.72.11",
+        territoire: "Commune de Liège",
+        services: "<b>— SERVICE —</b>\n" +
+	     "<b> Public :</b> Adultes rencontrant une difficulté d’ordre psychique ou psychiatrique souhaitant se réinsérer socialement.\n" +
+	     "<b> Service :</b> Chacun gère son quotidien.\n Accompagnement dans l'acquisition d'outils.\n Accompagnement psycho-social.\n\n",
+	admis: "04/224.72.11",
+    },
+    { 
+        arr: "Liège", com: "Oupeye", nom: "IHP7 de L'Essor - SSM CLIPS", type: "IHP", 
+        lat: 50.69345241038022, lng: 5.649044868411234, 
+        adr: "Rue Pierre Blanche 41,  4683 Vivegnis", tel: "04/224.72.11",
+        territoire: "Arrondissement de Liège",
+        services: "<b>— SERVICE —</b>\n" +
+	     "<b> Public :</b> Adultes rencontrant une difficulté d’ordre psychique ou psychiatrique souhaitant se réinsérer socialement.\n" +
+	     "<b> Service :</b> Chacun gère son quotidien.\n Accompagnement dans l'acquisition d'outils.\n Accompagnement psycho-social.\n\n",
+	admis: "04/224.72.11",
+    },
+    { 
+        arr: "Waremme", com: "Waremme", nom: "Maison Hesbaye", type: "IHP", 
+        lat: 50.69345241038022, lng: 5.649044868411234, 
+        adr: "Av. Guillaume Joachim, 49, 4300 Waremme", tel: "019/54.98.92",
+        territoire: "Arrondissement de Waremme",
+        services: "<b>— SERVICE —</b>\n" +
+	     "<b> Public :</b> Adultes rencontrant une difficulté d’ordre psychique ou psychiatrique souhaitant se réinsérer socialement.\n" +
+	     "<b> Service :</b> Chacun gère son quotidien.\n Accompagnement dans l'acquisition d'outils.\n Accompagnement psycho-social.\n\n",
+	admis: "019/54.98.92",
+    },
+    { 
+        arr: "Liège", com: "Herstal", nom: "IHP - SSM Huy", type: "IHP", 
+        lat: 50.69345241038022, lng: 5.649044868411234, 
+        adr: "Rue Trixhe-Maille 192, 4040 Herstal", tel: "04/264.08.25 - 0478/90.96.97",
+        territoire: "Arrondissement de Waremme",
+        services: "<b>— SERVICE —</b>\n" +
+	     "<b> Public :</b> Adultes rencontrant une difficulté d’ordre psychique ou psychiatrique souhaitant se réinsérer socialement.\n" +
+	     "<b> Missions :</b> Travailler le développement maximal des capacités d’autonomie.\n Construire avec la personne un projet d’insertion.\n\n",
+	admis: "04/264.08.25",
+    },
+    // --- 2. ASBL RÉINSERTION ET CRF ---
+    { 
+        arr: "Liège", com: "Liège", nom: "Article 23", type: "REINSER", 
+        lat: 50.641749714331844, lng: 5.580940997243883, adr: "Chaussée des Prés 42-44, 4020 Liège", tel: "04.223/03.33",
+        territoire: "Arrondissement de Waremme",
+	desc: "Service de seconde ligne en santé mentale ambulatoire, qui vise à une (ré)insertion professionnelle.",
+        services: "<b>— SERVICE —</b>\n" +
+	     "<b> Public :</b> Usagers de la santé mentale \n" +
+	     "<b> Missions :</b> Insertion, et accompagnements au travail et dans les projets de vie.\n\n",
+	admis: "04.223/03.33", 
+    },
+    { 
+        arr: "Liège", com: "Liège", nom: "Revers", type: "REINSER", 
+        lat: 50.6441, lng: 5.5721, adr: "Rue Maghin 76-78, 4000 Liège", tel: "04/351.74.93",
+        territoire: "Arrondissement de Waremme",
+	desc: "ASBL visant à une réinsertion sociale des patients psychiatriques sévère via de l'art-thérapie",
+        services: "<b>— SERVICE —</b>\n" +
+	     "<b> Public :</b>  Public en souffrance mentale, fragilisé, souvent isolé voire marginalisé.\n" +
+	     "<b> Missions :</b> Distanciation de l'étiquetage psychiatrique via des activités culturelles et artistiques.\n Réinsertion sociale et lutte contre l'isolement des des membres.\n\n",
+	admis: "04/351.74.93", 
+    },
+    { 
+        arr: "Liège", com: "Liège", nom: "CRF : Club André Baillon", type: "REINSER", 
+        lat: 50.62867487931849, lng: 5.561957561272844, adr: "Avenue de l’Observatoire 20, 4000 Liège", tel: "04/252.01.20 - 0491/94.28.48",
+        territoire: "Arrondissement de Liège",
+	desc: "Ce centre propose un lieu et un temps intermédiaire (de 6 mois à 2 ans) pour (re)découvrir ses potentialités, (re)dynamiser ses ressources et élaborer un projet de (ré)insertion sociale progressive.",
+        services: "<b>— Caractéristiques —</b>\n" +
+	     "<b> Public :</b> Personnes confrontées à une souffrance psychique, à des modes de vie qui les mettent en difficulté avec la communauté et qui bénéficient de diagnostics de pathologies psychiatriques.\n" +
+	     "<b> Prise en charge :</b> Stimulation des capacités créatrices et adaptatives.\n Activités orientées sur le travail de la parole, du corps et de la matière.\n Initiatives de décloisonnement et d'échange avec l'environnement social.\n Contacts réguliers avec l'environnement professionnel et familial.\n\n",
+	admis: "04/252.01.20",
+    },
+    { 
+        arr: "Liège", com: "Liège", nom: "CRF : Le Sablier", type: "REINSER", 
+        lat: 50.67891281091371, lng: 5.55884284491236, adr: "Rue du Village 38, Eben-Emael", tel: "04/286.20.95",
+        territoire: "Arrondissement de Liège",
+	desc: "La finalité du CRF est l’insertion sociale et/ou professionnelle de l’usager.\n Le programme de réadaptation s’articule autour d’activités collectives et individuelles.",
+        services: "<b>— Caractéristiques —</b>\n" +
+	     "<b> Public :</b> Adultes souffrant de difficultés psychologiques stabilisées faisant obstacle à une vie autonome, à une intégration professionnelle et à l’élaboration d’un projet de vie.\n" +
+	     "<b> Objectifs :</b> Mise en place des compétences professionnelles favorisant l’insertion dans le milieu du travail.\n augmenter et développer l’estime de soi.\n améliorer la qualité de vie.\n nstaller les compétences permettant de vivre de façon autonome et gratifiante dans son cadre de vie.\n\n",
+	admis: "04/286.20.95",
+    },
+    { 
+        arr: "Liège", com: "Beyne-Heusay", nom: "CRF : Le Maillet", type: "REINSER", 
+        lat: 50.6188782371977, lng: 5.659711381900626, adr: "Rue Cardinal Mercier 32, 4610 Beyne-Heusay", tel: "04/358.46.24",
+        territoire: "Arrondissement de Liège",
+	desc: "La finalité du CRF est l’insertion sociale et/ou professionnelle de l’usager.",
+        services: "<b>— Caractéristiques —</b>\n" +
+	     "<b> Public :</b> Des personnes présentant des difficultés psychiques stabilisées et désireuses de développer leur autonomie et/ou leur insertion sociale et/ou professionnelle.\n" +
+	     "<b> Objectifs :</b> Mise en place des compétences professionnelles favorisant l’insertion dans le milieu du travail.\n augmenter et développer l’estime de soi.\n améliorer la qualité de vie.\n nstaller les compétences permettant de vivre de façon autonome et gratifiante dans son cadre de vie.\n\n",
+	admis: "04/358.46.24",
+    },
+    { 
+        arr: "Liège", com: "Herstal", nom: "CRF : L'Intervalle", type: "REINSER", 
+        lat: 50.67140986266432, lng: 5.595909981903558, adr: "Chaussée Brunehault 268, 4041 Vottem", tel: "04/227.35.35",
+        territoire: "Arrondissement de Liège",
+	desc: "La finalité du CRF est l’insertion sociale et/ou professionnelle de l’usager.",
+        services: "<b>— Caractéristiques —</b>\n" +
+	     "<b> Public :</b> Des personnes présentant des difficultés psychiques stabilisées et désireuses de développer leur autonomie et/ou leur insertion sociale et/ou professionnelle.\n" +
+	     "<b> Objectifs :</b> Mise en place des compétences professionnelles favorisant l’insertion dans le milieu du travail.\n augmenter et développer l’estime de soi.\n améliorer la qualité de vie.\n nstaller les compétences permettant de vivre de façon autonome et gratifiante dans son cadre de vie.\n\n",
+	admis: "04/227.35.35",
+    },
+    { 
+        arr: "Liège", com: "Oupeye", nom: "CRP : L'Ancre", type: "REINSER", 
+        lat: 50.70964095862422, lng: 5.644605226083116, adr: "Rue du Roi Albert 235, 4680 Oupeye", tel: "04/264.57.46 - 0473/52.81.12",
+        territoire: "Arrondissement de Liège",
+	desc: "Centre qui réinvesti les sphères sociales et professionnelles en développant des compétences multiples, le tout dans un environnement axé sur les forces et les compétences de l’usager.",
+        services: "<b>— Caractéristiques —</b>\n" +
+	     "<b> Public :</b> Des personnes présentant des difficultés psychiques stabilisées et désireuses de développer leur autonomie et/ou leur insertion sociale et/ou professionnelle\n" +
+	     "<b> Objectifs :</b> Mise en place des compétences professionnelles favorisant l’insertion dans le milieu du travail.\n augmenter et développer l’estime de soi.\n améliorer la qualité de vie.\n nstaller les compétences permettant de vivre de façon autonome et gratifiante dans son cadre de vie.\n\n",
+	admis: "04/264.57.46",
+    },
+];
+//---Groupes de soutien---
+var groupesData = {
+    "similes": {
+        nom: "Similes Wallonie",
+        adr: "Liège : Quai des Ardennes 24, 4020 Liège\n Verviers : Rue de Rome 13, 4800 Verviers\n",
+        tel: "Liège : 0498/16.88.42 Verviers: 0496/43.57.89\n",
+        services: "Groupe de parole pour les proches de personnes atteintes d’un trouble psychique."
+    },
+    "entendeurs de voix": {
+        nom: "Groupe des Entendeurs de Voix. (Hallucinations)",
+        adr: "Revers asbl, Rue Maghin, 76-78, 4000 Liège",
+        tel: "0499/88.49.64",
+        desc: "Réseau d'aide et d'information pour les personnes qui entendent des voix et/ou font l'expérience de perceptions inhabituelles",
+        services: " Groupe de parole et de soutien aux personnes Bipolaires\n Possible groupe en ligne : lucie9111000@gmail.com\n",
+        admis: "Ouvert à toute personne concernée par le trouble."
+    },
+    "balancier": {
+        nom: "Le Balancier (Bipolarité)",
+        adr: "Liège (Site Petit-Bourgogne)",
+        tel: "04/254.77.10",
+        desc: "Groupe d'entraide pour personnes souffrant de troubles bipolaires et leurs proches",
+        services: " Groupe de parole et de soutien aux personnes Bipolaires\n",
+        admis: "Ouvert à toute personne concernée par le trouble."
+    },
+    "funambule": {
+        nom: "Le Funambule (Bipolarité)",
+        tel: "0492/56.79.31",
+        desc: "groupes de parole en ligne sont destinés aux personnes souffrant de bipolarité.",
+        services: " Groupe de parole et de soutien aux personnes Bipolaires\n",
+        admis: "https://www.bipolarite.org/groupes-en-ligne/"
+	},
+    "accompagnement deuil": {
+        nom: "Espace PAD (Deuil)",
+        tel: "0495/78.83.86",
+        desc: "Accompagnement psychologique à toutes les personnes touchées par un deuil",
+        services: "<b>— Groupe de Parole, Écoute et Soutien. —</b>\n" +
+	     "<b> Espace Papillon :</b> Pour les enfants et les adolescents suite au décès d'un proche. \n" +
+	     "<b> Espace Coquelicot :</b> pour les adultes suite au décès d’un proche.\n\n",
+        admis: "0495/78.83.86"
+	},
+    "deuil périnatal": {
+        nom: "Deuil Périnatal",
+        tel: "04/321.61.87",
+        desc: "Groupe de soutien pour parents ayant perdu un enfant en cours de grossesse",
+        services: "Groupe de parole, écoute et soutien. Équipe pluridisciplinaire",
+        admis: "04/321.61.87"
+	},
+    "vivre sous les oliviers": {
+        nom: "Vivre sous les oliviers (Deuil - Suicide)",
+	adr: "Rue de Franchimont 24, 4800 Verviers, Belgique",
+        tel: "0477/69.49.33",
+        desc: "Groupes d’échanges et de rencontres entre des conjoints, des enfants, des parents, « victimes » du suicide d’un proche.",
+        services: "Deuil lié au suicide d'un proche.",
+        admis: "http://www.aliss.be/node/901"
+	},
+    "alcooliques anonymes": {
+        nom: "Alcooliques Anonymes",
+        tel: "078/15.25.56",
+        desc: "Association de personnes alcooliques et anciennement alcooliques.",
+        services: "Groupe de parole, écoute et soutien.",
+        admis: "www.alcooliquesanonymes.be"
+	},
+    "vie libre": {
+        nom: "Vie Libre",
+        desc: "Soutien à l'alcoolisme",
+        services: "Permanences téléphoniques et groupes de paroles sur le sujet de l’assuétude.",
+        admis: "https://www.vie-libre.be"
+	},
+     "abstinence et tolérance": {
+        nom: "Abstinence et Tolérance",
+        tel: "0479/81.44.75",
+        desc: "Soutien à l'assuétude de substances",
+        services: "Groupe de parole, écoute et soutien. Inclusion des proches",
+        admis: "Tous les lundis à la caserne de Saive"
+	},
+     "deuil périnatal": {
+        nom: "Deuil Périnatal",
+        tel: "04/321.61.87",
+        desc: "Groupe de soutien pour parents ayant perdu un enfant en cours de grossesse",
+        services: "Groupe de parole, écoute et soutien. Équipe pluridisciplinaire",
+        admis: "04/321.61.87"
+	},
+      "al'anon et al'ateen": {
+        nom: "Al'Alon et Al'Ateen",
+        tel: "04/321.61.87",
+        desc: "programme de rétablissement basé sur l’entraide et destiné aux familles, amis, collègues d’un malade alcoolique",
+        services: "Service pour adulte et enfants",
+        admis: "https://www.al-anon.be/reunions/en-province-de-liege/"
+	},
+	"rebond": {
+        nom: "Rebond",
+        tel: "04/321.61.87",
+        desc: "Groupe de parole/thérapeutique autour des consommations pour consommateurs.",
+        services: "Rue Ortmans-Hauzeur 42, 4800 Verviers : 2 vendredis par mois de 13h30 à 15h30",
+        admis: "Sans Rendez-vous"
+	},
+	"espace proche": {
+        nom: "Espace Proche",
+        tel: "04/321.61.87",
+        desc: "Groupe de parole destiné à l’entourage de personnes consommatrices",
+        services: "Rue Ortmans-Hauzeur 42, 4800 Verviers : 2ème jeudi du mois de 18h à 20h",
+        admis: "Sans Rendez-vous"
+	}
+};
+		var databaseTotale = databaseHospi.concat(databaseAssu, databaseSSM, databasePostHosp);
+
+    // 4. DESSIN ZONES
+    var zones = [
+        { name: "Waremme", color: "#8e44ad", coords: [[50.78, 5.05], [50.78, 5.45], [50.65, 5.45], [50.65, 5.05]] },
+        { name: "Liège", color: "#e67e22", coords: [[50.78, 5.45], [50.78, 5.80], [50.315, 5.80], [50.65, 5.45]] },
+        { name: "Huy", color: "#2980b9", coords: [[50.65, 5.05], [50.65, 5.45], [50.315, 5.80], [50.255, 5.80], [50.50, 5.00]] },
+        { name: "Verviers", color: "#27ae60", coords: [[50.75, 5.80], [50.75, 6.15], [50.35, 6.40], [50.255, 6.20], [50.255, 5.80], [50.315, 5.80]] }
+    ];
+
+    zones.forEach(function(z) {
+        L.polygon(z.coords, { color: z.color, fillColor: z.color, fillOpacity: 0.15, weight: 2 }).addTo(map)
+        .on('click', function(e) {
+            map.fitBounds(e.target.getBounds());
+            currentArrondissement = z.name;
+            setMode('tout');
+        });
+    });
+
+    window.onclick = function(e) { if (e.target == document.getElementById('infoModal')) closeModal(); }
+</script>
+</body>
+</html>
